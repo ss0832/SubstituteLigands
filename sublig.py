@@ -29,6 +29,8 @@ def num_parse(numbers):
     return sub_list
 
 
+
+
 def covalent_radii_lib(element):
     if element is int:
         element = number_element(element)
@@ -172,8 +174,9 @@ class SubstituteLigand():
         assert self.ndonor == self.nsub_donor, "The number of donor atoms and the number of substituting atoms must be the same."
 
         self.covalent_radii_threshold_scale = 1.2
-        self.iteration = 1000
+        self.iteration = 10000
         return
+
 
     def make_rotmat_vec2z(self, vec):
         unit_vec = vec / np.linalg.norm(vec)
@@ -234,6 +237,21 @@ class SubstituteLigand():
 
         return LJ_potential
 
+    def l_bfgs(self, prev_inv_hess, grad, prev_grad, prev_step, delta = 1.0):
+        
+        delta_grad = grad - prev_grad
+        rho_inv = np.sum(delta_grad * prev_step)  
+        if rho_inv > 1e-10:
+            rho = 1.0 / rho_inv
+            A = (np.eye(len(grad)) - rho * np.outer(prev_step, delta_grad))
+            inv_hess = np.dot(np.dot(A, prev_inv_hess), A) + rho * np.outer(prev_step, prev_step)
+            step = np.dot(inv_hess, grad.T).T
+        else:
+            step = delta * grad
+            inv_hess = prev_inv_hess
+
+        
+        return step, inv_hess
 
 
 
@@ -241,7 +259,7 @@ class SubstituteLigand():
         delta = 0.0001
         lr = 0.01
         z_vec = np.array([0, 0, init_distance], dtype="float64")
-
+        inv_hess = np.eye(3)
 
         for i in range(self.iteration):
 
@@ -291,11 +309,27 @@ class SubstituteLigand():
             z_angle_grad = (zp_lj_pot - zm_lj_pot) / (2 * delta)
             if i % 50 == 0:
                 print("grad : ", x_angle_grad, y_angle_grad, z_angle_grad)
+
+            if i == 0:
+                grad_rotmat = self.generate_rotmat(lr * x_angle_grad, lr * y_angle_grad, lr * z_angle_grad)
+                prev_step = np.array([lr * x_angle_grad, lr * y_angle_grad, lr * z_angle_grad], dtype="float64")
+                prev_grad = np.array([x_angle_grad, y_angle_grad, z_angle_grad], dtype="float64")
+            else:
+                grad = np.array([x_angle_grad, y_angle_grad, z_angle_grad], dtype="float64")
+                step, inv_hess = self.l_bfgs(inv_hess, grad, prev_grad, prev_step)
+                grad_rotmat = self.generate_rotmat(step[0].item(), step[1].item(), step[2].item())
+                prev_step = np.array([[step[0].item(), step[1].item(), step[2].item()]], dtype="float64")
+                prev_grad = np.array([x_angle_grad, y_angle_grad, z_angle_grad], dtype="float64")
+
+            
             grad_rotmat = self.generate_rotmat(lr * x_angle_grad, lr * y_angle_grad, lr * z_angle_grad)
 
             donor_centerized_sub_ligand_coord = np.dot(grad_rotmat, donor_centerized_sub_ligand_coord.T).T
 
+
+
             if np.linalg.norm(np.array([x_angle_grad, y_angle_grad, z_angle_grad], dtype="float64")) < 1e-10:
+                print("grad : ", np.linalg.norm(np.array([x_angle_grad, y_angle_grad, z_angle_grad], dtype="float64")))
                 print("Converged at itr.", i)
                 break
 
@@ -306,6 +340,7 @@ class SubstituteLigand():
     def opt_place_bidentate(self, tgt_removed_z_vec_complex_coord, donor_centerized_sub_ligand_coord):
         delta = 0.0001
         lr = 0.1
+        inv_hess = np.eye(1)
 
         for i in range(self.iteration):
 
@@ -328,11 +363,25 @@ class SubstituteLigand():
            
             if i % 50 == 0:
                 print("grad : ", z_angle_grad)
-            grad_rotmat = self.generate_rotmat(0, 0, lr * z_angle_grad)
+            
+
+            if i == 0:
+                grad_rotmat = self.generate_rotmat(0, 0, lr * z_angle_grad)
+                prev_step = np.array([lr * z_angle_grad], dtype="float64")
+                prev_grad = np.array([z_angle_grad], dtype="float64")
+            else:
+                grad = np.array([z_angle_grad], dtype="float64")
+                step, inv_hess = self.l_bfgs(inv_hess, grad, prev_grad, prev_step)
+                grad_rotmat = self.generate_rotmat(0, 0, step.item())
+                prev_step = np.array([[step.item()]], dtype="float64")
+                prev_grad = np.array([z_angle_grad], dtype="float64")
+
+
 
             donor_centerized_sub_ligand_coord = np.dot(grad_rotmat, donor_centerized_sub_ligand_coord.T).T
 
             if np.linalg.norm(np.array([z_angle_grad], dtype="float64")) < 1e-10:
+                print("grad : ", z_angle_grad)
                 print("Converged at itr.", i)
                 break
 

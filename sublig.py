@@ -317,6 +317,8 @@ class SubstituteLigand():
             else:
                 grad = np.array([x_angle_grad, y_angle_grad, z_angle_grad], dtype="float64")
                 step, inv_hess = self.l_bfgs(inv_hess, grad, prev_grad, prev_step)
+                norm_step = np.linalg.norm(step)
+                step = min(norm_step, 1.0) * step / norm_step
                 grad_rotmat = self.generate_rotmat(step[0].item(), step[1].item(), step[2].item())
                 prev_step = np.array([[step[0].item(), step[1].item(), step[2].item()]], dtype="float64")
                 prev_grad = np.array([x_angle_grad, y_angle_grad, z_angle_grad], dtype="float64")
@@ -372,6 +374,8 @@ class SubstituteLigand():
             else:
                 grad = np.array([z_angle_grad], dtype="float64")
                 step, inv_hess = self.l_bfgs(inv_hess, grad, prev_grad, prev_step)
+                norm_step = np.linalg.norm(step)
+                step = min(norm_step, 1.0) * step / norm_step
                 grad_rotmat = self.generate_rotmat(0, 0, step.item())
                 prev_step = np.array([[step.item()]], dtype="float64")
                 prev_grad = np.array([z_angle_grad], dtype="float64")

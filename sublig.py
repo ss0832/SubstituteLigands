@@ -103,12 +103,12 @@ def make_lig_fragment_list(mol_list, element_list, metal, lig_donor, covalent_ra
          
         lig_fragment_list.append(tmp_fragm_list)
     
-
+    substitution_tgt_lig = []
     for lig in lig_fragment_list:
         for donor in lig_donor:
             for d in donor:
                 if d in lig:
-                    substitution_tgt_lig = lig    
+                    substitution_tgt_lig.extend(lig)    
 
     #print("\ncoordinated ligands list:", lig_fragment_list)
     #print("tgt ligand:", substitution_tgt_lig)

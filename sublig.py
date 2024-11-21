@@ -178,6 +178,8 @@ class SubstituteLigand():
         self.covalent_radii_threshold_scale = 1.2
         self.iteration = 10000
         self.threshold = 1e-10
+        self.rand_search_iter = 7000
+        
         return
 
 
@@ -235,8 +237,12 @@ class SubstituteLigand():
 
 
         dist_mat = np.linalg.norm(donor_centerized_sub_ligand_coord[:, np.newaxis] - tgt_removed_z_vec_complex_coord, axis=2)
-        
-        LJ_potential = np.sum(1.0 * ((1.0 / dist_mat) ** 12 -2 * (1.0 / dist_mat) ** 6) + (1e-5 / dist_mat))
+        LJ_pot_mat = 1.0 * ((1.0 / dist_mat) ** 12 -2 * (1.0 / dist_mat) ** 6) + (1e-5 / dist_mat)
+        non_inf_nan_mask = ~np.isnan(LJ_pot_mat) & ~np.isinf(LJ_pot_mat)
+        LJ_pot_mat = LJ_pot_mat[non_inf_nan_mask]
+        #LJ_pot_max = np.max(LJ_pot_mat)
+        LJ_potential = np.sum(LJ_pot_mat)
+        #LJ_potential = LJ_pot_max
 
         return LJ_potential
 
@@ -266,8 +272,21 @@ class SubstituteLigand():
         inv_hess = np.eye((3))
 
         for i in range(self.iteration):
-
-
+            if i == 0:
+                prev_ene = np.inf
+                print("rand search")
+                for j in range(self.rand_search_iter):
+                    grad_rotmat = self.generate_rotmat(np.random.uniform(0, 0.1 * np.pi), np.random.uniform(0, 0.1 *  np.pi), np.random.uniform(0, 0.1 * np.pi))
+                    cand_donor_centerized_sub_ligand_coord = np.dot(grad_rotmat, donor_centerized_sub_ligand_coord.T).T
+                    tmp_sub_lig_coord = z_vec + cand_donor_centerized_sub_ligand_coord
+                    lj_pot = self.calc_LJ_pot(tmp_sub_lig_coord, tgt_removed_z_vec_complex_coord)
+                    if prev_ene > lj_pot:
+                        print("energy :", lj_pot)
+                        prev_ene = lj_pot
+                        donor_centerized_sub_ligand_coord = cand_donor_centerized_sub_ligand_coord
+                        
+                    
+               
             tmp_sub_lig_coord = z_vec + donor_centerized_sub_ligand_coord
             lj_pot = self.calc_LJ_pot(tmp_sub_lig_coord, tgt_removed_z_vec_complex_coord)
             if i % 50 == 0:
@@ -341,6 +360,7 @@ class SubstituteLigand():
 
 
             if np.linalg.norm(np.array([x_angle_grad, y_angle_grad, z_angle_grad], dtype="float64")) < self.threshold:
+                print(lj_pot)
                 print("grad : ", np.linalg.norm(np.array([x_angle_grad, y_angle_grad, z_angle_grad], dtype="float64")))
                 print("Converged at itr.", i)
                 break
@@ -357,11 +377,18 @@ class SubstituteLigand():
 
         for i in range(self.iteration):
             if i == 0:
-              
-                grad_rotmat = self.generate_rotmat(0, 0, np.pi)
-                donor_centerized_sub_ligand_coord = copy.copy(np.dot(grad_rotmat, donor_centerized_sub_ligand_coord.T).T)
-
-
+                min_ene = np.inf
+                min_grad_rot_mat = None
+                print("rand search")
+                for j in range(self.rand_search_iter):
+                    #grad_rotmat = self.generate_rotmat(0, 0, np.pi)
+                    grad_rotmat = self.generate_rotmat(0, 0, np.random.uniform(0, 2 * np.pi))
+                    cand_donor_centerized_sub_ligand_coord = copy.copy(np.dot(grad_rotmat, donor_centerized_sub_ligand_coord.T).T)
+                    lj_pot = self.calc_LJ_pot(cand_donor_centerized_sub_ligand_coord, tgt_removed_z_vec_complex_coord)
+                    if min_ene > lj_pot:
+                        min_ene = lj_pot
+                        donor_centerized_sub_ligand_coord = cand_donor_centerized_sub_ligand_coord
+                    
             lj_pot = self.calc_LJ_pot(donor_centerized_sub_ligand_coord, tgt_removed_z_vec_complex_coord)
             if i % 50 == 0:
                 print("Iteration "+str(i)+" : ", lj_pot)
@@ -405,8 +432,10 @@ class SubstituteLigand():
             donor_centerized_sub_ligand_coord = copy.copy(np.dot(grad_rotmat, donor_centerized_sub_ligand_coord.T).T)
 
             if np.linalg.norm(np.array([z_angle_grad], dtype="float64")) < self.threshold:
+                print(lj_pot)
                 print("grad : ", z_angle_grad)
                 print("Converged at itr.", i)
+                
                 break
 
         print("---------------")
@@ -483,10 +512,11 @@ class SubstituteLigand():
 
         for i in range(len(z_vec_donor_centerized_sub_ligand_coord)):
             print(self.sub_ligand_element_list[i]+"   {0:.12f}    {1:.12f}    {2:.12f}".format(z_vec_donor_centerized_sub_ligand_coord[i][0], z_vec_donor_centerized_sub_ligand_coord[i][1], z_vec_donor_centerized_sub_ligand_coord[i][2]))
-
+        print()
         
         self.substituted_coord = np.concatenate((tgt_removed_z_vec_complex_coord, z_vec_donor_centerized_sub_ligand_coord))
         self.substituted_element_list = tgt_removed_z_vec_complex_element + self.sub_ligand_element_list
+        self.broken_flag = self.check_broken_struct(self.substituted_coord, self.substituted_element_list)
         return
     
     def run_bidentate_lig(self):
@@ -521,16 +551,30 @@ class SubstituteLigand():
 
         for i in range(len(opted_z_vec_sub_dcenter_2_d_centrized_sub_ligand_coord)):
             print(self.sub_ligand_element_list[i]+"   {0:.12f}    {1:.12f}    {2:.12f}".format(opted_z_vec_sub_dcenter_2_d_centrized_sub_ligand_coord[i][0], opted_z_vec_sub_dcenter_2_d_centrized_sub_ligand_coord[i][1], opted_z_vec_sub_dcenter_2_d_centrized_sub_ligand_coord[i][2]))
-      
+        print()
         self.substituted_coord = np.concatenate((tgt_removed_z_vec_complex_coord, opted_z_vec_sub_dcenter_2_d_centrized_sub_ligand_coord))
         self.substituted_element_list = tgt_removed_z_vec_complex_element + self.sub_ligand_element_list
+
+        self.broken_flag = self.check_broken_struct(self.substituted_coord, self.substituted_element_list)
+        
+        
         return
     
+    def check_broken_struct(self, geometry, element_list, threshold_scaling=0.40):
+        diff = geometry[:, np.newaxis, :] - geometry[np.newaxis, :, :]
+        distances = np.linalg.norm(diff, axis=2)
+        
+        covalent_radiis = np.array([covalent_radii_lib(element) for element in element_list])
+        thresholds = threshold_scaling * (covalent_radiis[:, np.newaxis] + covalent_radiis[np.newaxis, :])
 
-
-    #def run_tridentate_lig(self):
-    #    return
-    
+        
+        np.fill_diagonal(distances, np.inf)
+        broken_flag = np.any(distances < thresholds)
+        if broken_flag:
+            print("This structure may be broken...")
+        
+        return broken_flag
+        
 
     def run(self):
         self.complex_coord, self.complex_element_list = read_xyz(self.complex_abs_path)

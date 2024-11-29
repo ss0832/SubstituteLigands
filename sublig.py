@@ -258,7 +258,7 @@ class SubstituteLigand():
     def opt_place(self, tgt_removed_z_vec_complex_coord, init_distance, donor_centerized_sub_ligand_coord):
         delta = 0.0001
         lr = 0.01
-        z_vec = np.array([0, 0, init_distance], dtype="float64")
+        z_vec = np.array([0.0, 0.0, init_distance], dtype="float64")
         inv_hess = np.eye(3)
 
         for i in range(self.iteration):
@@ -330,7 +330,7 @@ class SubstituteLigand():
 
 
 
-            if np.linalg.norm(np.array([x_angle_grad, y_angle_grad, z_angle_grad], dtype="float64")) < 1e-10:
+            if np.linalg.norm(np.array([x_angle_grad, y_angle_grad, z_angle_grad], dtype="float64")) < 1e-8:
                 print("grad : ", np.linalg.norm(np.array([x_angle_grad, y_angle_grad, z_angle_grad], dtype="float64")))
                 print("Converged at itr.", i)
                 break
@@ -423,12 +423,9 @@ class SubstituteLigand():
             mean_metal_covalent_radii += covalent_radii_lib(self.complex_element_list[i - 1])
         mean_metal_covalent_radii /= len(self.metal_atom)
 
-        mean_sub_donor_covalent_radii = 0.0
-        for i in self.sub_donor_atom[0]:
-            mean_sub_donor_covalent_radii += covalent_radii_lib(self.sub_ligand_element_list[i - 1])
-        mean_sub_donor_covalent_radii /= len(self.sub_donor_atom[0])
-
-        init_distance = mean_metal_covalent_radii + mean_sub_donor_covalent_radii
+        
+        init_distance = np.linalg.norm(self.input_donor_center_coord - self.metal_center_coord)
+        
         #------
         ligand_fragm_point_list = []
         for ligand_num in self.ligand_list:

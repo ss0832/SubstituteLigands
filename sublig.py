@@ -11,7 +11,7 @@ def parser():
     parser.add_argument('-m', '--input_metal_atom', type=str, help='metal atom label number', required=True)# acceptor atom
     parser.add_argument('-l', '--ligand', type=str, help='Ligand to substitute (.xyz file)', required=True)
     parser.add_argument('-sd', '--sub_donor_atom', nargs="*", type=str, help='sub atom label number', required=True)
-    
+    parser.add_argument("-c", "--covalent_radius", action="store_true", help="apply covalent radii")
     args = parser.parse_args()
     args = vars(args)
     return args
@@ -138,7 +138,7 @@ def save_xyz(file_path, coord, element_list, add_name):
         f.write(str(natom)+"\n")
         f.write(add_name+"\n")
         for i in range(len(coord)):
-            f.write(element_list[i]+"  {0:.12f}   {1:.12f}   {2:.12f}".format(*coord[i].tolist())+"\n")
+            f.write(element_list[i]+"     {0:.12f}      {1:.12f}      {2:.12f}".format(*coord[i].tolist())+"\n")
 
 
     return
@@ -175,6 +175,8 @@ class SubstituteLigand():
 
         self.covalent_radii_threshold_scale = 1.2
         self.iteration = 10000
+        self.covalent_radii_flag = kwargs["covalent_radius"]
+
         return
 
 
@@ -262,6 +264,11 @@ class SubstituteLigand():
         inv_hess = np.eye(3)
 
         for i in range(self.iteration):
+            if i == 0:
+                grad_rotmat = self.generate_rotmat(np.pi, np.pi, np.pi)
+                donor_centerized_sub_ligand_coord = np.dot(grad_rotmat, donor_centerized_sub_ligand_coord.T).T
+
+
 
 
             tmp_sub_lig_coord = z_vec + donor_centerized_sub_ligand_coord
@@ -337,6 +344,7 @@ class SubstituteLigand():
 
         z_vec_donor_centerized_sub_ligand_coord = z_vec + donor_centerized_sub_ligand_coord
         print("---------------")
+        print()
         return z_vec_donor_centerized_sub_ligand_coord
 
     def opt_place_bidentate(self, tgt_removed_z_vec_complex_coord, donor_centerized_sub_ligand_coord):
@@ -390,6 +398,7 @@ class SubstituteLigand():
                 break
 
         print("---------------")
+        print()
         return donor_centerized_sub_ligand_coord
 
 
@@ -423,8 +432,19 @@ class SubstituteLigand():
             mean_metal_covalent_radii += covalent_radii_lib(self.complex_element_list[i - 1])
         mean_metal_covalent_radii /= len(self.metal_atom)
 
-        
-        init_distance = np.linalg.norm(self.input_donor_center_coord - self.metal_center_coord)
+        if self.covalent_radii_flag:
+            metal_cov_radii = 0.0
+            for i in range(len(self.metal_atom)): 
+                metal_cov_radii += covalent_radii_lib(self.complex_element_list[self.metal_atom[i] - 1]) * UnitValueLib().bohr2angstroms
+            metal_cov_radii /= len(self.metal_atom)
+            sub_donor_cov_radii = 0.0
+            for i in range(len(self.sub_donor_atom[0])):
+                sub_donor_cov_radii += covalent_radii_lib(self.sub_ligand_element_list[self.sub_donor_atom[0][i] - 1]) * UnitValueLib().bohr2angstroms
+            sub_donor_cov_radii /= len(self.sub_donor_atom[0])
+            init_distance = metal_cov_radii + sub_donor_cov_radii
+
+        else:
+            init_distance = np.linalg.norm(self.input_donor_center_coord - self.metal_center_coord)
         
         #------
         ligand_fragm_point_list = []
@@ -455,10 +475,10 @@ class SubstituteLigand():
         z_vec_donor_centerized_sub_ligand_coord = self.opt_place(tgt_removed_z_vec_complex_coord, init_distance, donor_centerized_sub_ligand_coord)
 
         for i in range(len(tgt_removed_z_vec_complex_coord)):
-            print(tgt_removed_z_vec_complex_element[i]+"  {0:.12f}   {1:.12f}   {2:.12f}".format(tgt_removed_z_vec_complex_coord[i][0], tgt_removed_z_vec_complex_coord[i][1], tgt_removed_z_vec_complex_coord[i][2]))
+            print(tgt_removed_z_vec_complex_element[i]+"     {0:.12f}      {1:.12f}      {2:.12f}".format(tgt_removed_z_vec_complex_coord[i][0], tgt_removed_z_vec_complex_coord[i][1], tgt_removed_z_vec_complex_coord[i][2]))
 
         for i in range(len(z_vec_donor_centerized_sub_ligand_coord)):
-            print(self.sub_ligand_element_list[i]+"  {0:.12f}   {1:.12f}   {2:.12f}".format(z_vec_donor_centerized_sub_ligand_coord[i][0], z_vec_donor_centerized_sub_ligand_coord[i][1], z_vec_donor_centerized_sub_ligand_coord[i][2]))
+            print(self.sub_ligand_element_list[i]+"     {0:.12f}      {1:.12f}      {2:.12f}".format(z_vec_donor_centerized_sub_ligand_coord[i][0], z_vec_donor_centerized_sub_ligand_coord[i][1], z_vec_donor_centerized_sub_ligand_coord[i][2]))
 
         
         self.substituted_coord = np.concatenate((tgt_removed_z_vec_complex_coord, z_vec_donor_centerized_sub_ligand_coord))
@@ -495,10 +515,10 @@ class SubstituteLigand():
 
 
         for i in range(len(tgt_removed_z_vec_complex_coord)):
-            print(tgt_removed_z_vec_complex_element[i]+"  {0:.12f}   {1:.12f}   {2:.12f}".format(tgt_removed_z_vec_complex_coord[i][0], tgt_removed_z_vec_complex_coord[i][1], tgt_removed_z_vec_complex_coord[i][2]))
+            print(tgt_removed_z_vec_complex_element[i]+"     {0:.12f}      {1:.12f}      {2:.12f}".format(tgt_removed_z_vec_complex_coord[i][0], tgt_removed_z_vec_complex_coord[i][1], tgt_removed_z_vec_complex_coord[i][2]))
 
         for i in range(len(z_vec_sub_dcenter_2_d_centrized_sub_ligand_coord)):
-            print(self.sub_ligand_element_list[i]+"  {0:.12f}   {1:.12f}   {2:.12f}".format(z_vec_sub_dcenter_2_d_centrized_sub_ligand_coord[i][0], z_vec_sub_dcenter_2_d_centrized_sub_ligand_coord[i][1], z_vec_sub_dcenter_2_d_centrized_sub_ligand_coord[i][2]))
+            print(self.sub_ligand_element_list[i]+"     {0:.12f}      {1:.12f}      {2:.12f}".format(z_vec_sub_dcenter_2_d_centrized_sub_ligand_coord[i][0], z_vec_sub_dcenter_2_d_centrized_sub_ligand_coord[i][1], z_vec_sub_dcenter_2_d_centrized_sub_ligand_coord[i][2]))
       
         self.substituted_coord = np.concatenate((tgt_removed_z_vec_complex_coord, z_vec_sub_dcenter_2_d_centrized_sub_ligand_coord))
         self.substituted_element_list = tgt_removed_z_vec_complex_element + self.sub_ligand_element_list
@@ -508,6 +528,7 @@ class SubstituteLigand():
     
 
     def check_broken_struct(self, geometry, element_list, threshold_scaling=0.40):
+        print()
         diff = geometry[:, np.newaxis, :] - geometry[np.newaxis, :, :]
         distances = np.linalg.norm(diff, axis=2)
         
@@ -593,7 +614,7 @@ if __name__ == '__main__':
         print("The number of donor atoms and the number of substituting atoms must be the same.")
         sys.exit()
     
-    if len(args["input_donor_atom"]) < 4:
+    if len(args["input_donor_atom"]) < 3:
         sub = SubstituteLigand(**args)
     else:
         print("The number of donor atoms must be 1 or 2.")

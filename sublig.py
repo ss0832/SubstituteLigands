@@ -351,9 +351,15 @@ class SubstituteLigand():
         delta = 0.0001
         lr = 0.1
         inv_hess = np.eye(1)
-
+        
+        lj_pot = 0.0
+        prev_lj_pot = 0.0
+        prev_prev_lj_pot = 1.e+10
         for i in range(self.iteration):
+            
 
+            prev_prev_lj_pot = prev_lj_pot
+            prev_lj_pot = lj_pot
             lj_pot = self.calc_LJ_pot(donor_centerized_sub_ligand_coord, tgt_removed_z_vec_complex_coord)
             if i % 50 == 0:
                 print("Iteration "+str(i)+" : ", lj_pot)
@@ -379,15 +385,20 @@ class SubstituteLigand():
                 grad_rotmat = self.generate_rotmat(0, 0, lr * z_angle_grad)
                 prev_step = np.array([lr * z_angle_grad], dtype="float64")
                 prev_grad = np.array([z_angle_grad], dtype="float64")
+            
             else:
                 grad = np.array([z_angle_grad], dtype="float64")
                 step, inv_hess = self.l_bfgs(inv_hess, grad, prev_grad, prev_step)
                 norm_step = np.linalg.norm(step)
-                step = min(norm_step, 1.0) * step / norm_step
+                if abs(prev_prev_lj_pot - lj_pot) < 1e-6:
+                    #print("Oscillation detected.")
+                    step = min(norm_step, 0.5) * step / norm_step
+                else:
+                    step = min(norm_step, 1.0) * step / norm_step
                 grad_rotmat = self.generate_rotmat(0, 0, step.item())
                 prev_step = np.array([[step.item()]], dtype="float64")
                 prev_grad = np.array([z_angle_grad], dtype="float64")
-
+               
 
 
             donor_centerized_sub_ligand_coord = np.dot(grad_rotmat, donor_centerized_sub_ligand_coord.T).T

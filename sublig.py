@@ -175,6 +175,7 @@ class SubstituteLigand():
 
         self.covalent_radii_threshold_scale = 1.2
         self.iteration = 10000
+        self.add_iteration = 6
         self.covalent_radii_flag = kwargs["covalent_radius"]
 
         return
@@ -347,17 +348,16 @@ class SubstituteLigand():
         print()
         return z_vec_donor_centerized_sub_ligand_coord
 
-    def opt_place_bidentate(self, tgt_removed_z_vec_complex_coord, donor_centerized_sub_ligand_coord):
+    def opt_place_bidentate(self, tgt_removed_z_vec_complex_coord, donor_centerized_sub_ligand_coord, tgt_removed_z_vec_complex_element):
         delta = 0.0001
         lr = 0.1
         inv_hess = np.eye(1)
-        
+        tr = 1.0
         lj_pot = 0.0
         prev_lj_pot = 0.0
         prev_prev_lj_pot = 1.e+10
+       
         for i in range(self.iteration):
-            
-
             prev_prev_lj_pot = prev_lj_pot
             prev_lj_pot = lj_pot
             lj_pot = self.calc_LJ_pot(donor_centerized_sub_ligand_coord, tgt_removed_z_vec_complex_coord)
@@ -369,14 +369,9 @@ class SubstituteLigand():
             zm_donor_centerized_sub_ligand_coord = np.dot(m_z_rotmat, donor_centerized_sub_ligand_coord.T).T
            
             zm_lj_pot = self.calc_LJ_pot(zm_donor_centerized_sub_ligand_coord, tgt_removed_z_vec_complex_coord)
-
-
             zp_donor_centerized_sub_ligand_coord = np.dot(p_z_rotmat, donor_centerized_sub_ligand_coord.T).T
-            
             zp_lj_pot = self.calc_LJ_pot(zp_donor_centerized_sub_ligand_coord, tgt_removed_z_vec_complex_coord)
-
             z_angle_grad =  (zp_lj_pot - zm_lj_pot) / (2 * delta)
-           
             if i % 50 == 0:
                 print("grad : ", z_angle_grad)
             
@@ -390,16 +385,18 @@ class SubstituteLigand():
                 grad = np.array([z_angle_grad], dtype="float64")
                 step, inv_hess = self.l_bfgs(inv_hess, grad, prev_grad, prev_step)
                 norm_step = np.linalg.norm(step)
+                
                 if abs(prev_prev_lj_pot - lj_pot) < 1e-6:
-                    #print("Oscillation detected.")
-                    step = min(norm_step, 0.5) * step / norm_step
+                    tr *= 0.75
+                 
                 else:
-                    step = min(norm_step, 1.0) * step / norm_step
+                    tr = 1.0
+  
+                step = min(norm_step, tr) * step / norm_step
                 grad_rotmat = self.generate_rotmat(0, 0, step.item())
                 prev_step = np.array([[step.item()]], dtype="float64")
                 prev_grad = np.array([z_angle_grad], dtype="float64")
                
-
 
             donor_centerized_sub_ligand_coord = np.dot(grad_rotmat, donor_centerized_sub_ligand_coord.T).T
 
@@ -407,6 +404,19 @@ class SubstituteLigand():
                 print("grad : ", z_angle_grad)
                 print("Converged at itr.", i)
                 break
+        else:
+            
+            for i in range(self.add_iteration):
+                print("# Additional ITR. ", i)
+                substituted_coord = np.concatenate((tgt_removed_z_vec_complex_coord, donor_centerized_sub_ligand_coord))
+                substituted_element_list = tgt_removed_z_vec_complex_element + self.sub_ligand_element_list
+                broken_flag = self.check_broken_struct(substituted_coord, substituted_element_list)
+                if broken_flag:
+                    grad_rotmat = self.generate_rotmat(0, 0, 2 * np.pi / self.add_iteration)
+                    donor_centerized_sub_ligand_coord = np.dot(grad_rotmat, donor_centerized_sub_ligand_coord.T).T
+                else:
+                    break
+
 
         print("---------------")
         print()
@@ -522,7 +532,7 @@ class SubstituteLigand():
         tgt_removed_z_vec_complex_coord = np.array(tgt_removed_z_vec_complex_coord, dtype="float64") 
 
 
-        z_vec_sub_dcenter_2_d_centrized_sub_ligand_coord = self.opt_place_bidentate(tgt_removed_z_vec_complex_coord, z_vec_sub_dcenter_2_d_centrized_sub_ligand_coord)
+        z_vec_sub_dcenter_2_d_centrized_sub_ligand_coord = self.opt_place_bidentate(tgt_removed_z_vec_complex_coord, z_vec_sub_dcenter_2_d_centrized_sub_ligand_coord, tgt_removed_z_vec_complex_element)
 
 
         for i in range(len(tgt_removed_z_vec_complex_coord)):

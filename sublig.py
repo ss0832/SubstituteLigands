@@ -174,7 +174,7 @@ class SubstituteLigand():
         assert self.ndonor == self.nsub_donor, "The number of donor atoms and the number of substituting atoms must be the same."
 
         self.covalent_radii_threshold_scale = 1.2
-        self.iteration = 10000
+        self.iteration = 3000
         self.add_iteration = 6
         self.covalent_radii_flag = kwargs["covalent_radius"]
 
@@ -253,7 +253,6 @@ class SubstituteLigand():
             step = delta * grad
             inv_hess = prev_inv_hess
 
-        
         return step, inv_hess
 
 
@@ -358,6 +357,19 @@ class SubstituteLigand():
         prev_prev_lj_pot = 1.e+10
        
         for i in range(self.iteration):
+            if i == 0:
+                print("pre-conditioning...")
+                for j in range(self.add_iteration):
+                    substituted_coord = np.concatenate((tgt_removed_z_vec_complex_coord, donor_centerized_sub_ligand_coord))
+                    substituted_element_list = tgt_removed_z_vec_complex_element + self.sub_ligand_element_list
+                    broken_flag = self.check_broken_struct(substituted_coord, substituted_element_list)
+                    if broken_flag:
+                        grad_rotmat = self.generate_rotmat(0, 0, 2 * np.pi / self.add_iteration)
+                        donor_centerized_sub_ligand_coord = np.dot(grad_rotmat, donor_centerized_sub_ligand_coord.T).T
+                    else:
+                        break
+                        
+                     
             prev_prev_lj_pot = prev_lj_pot
             prev_lj_pot = lj_pot
             lj_pot = self.calc_LJ_pot(donor_centerized_sub_ligand_coord, tgt_removed_z_vec_complex_coord)
@@ -543,13 +555,14 @@ class SubstituteLigand():
       
         self.substituted_coord = np.concatenate((tgt_removed_z_vec_complex_coord, z_vec_sub_dcenter_2_d_centrized_sub_ligand_coord))
         self.substituted_element_list = tgt_removed_z_vec_complex_element + self.sub_ligand_element_list
+        print()
         self.broken_flag = self.check_broken_struct(self.substituted_coord, self.substituted_element_list)
         
         return
     
 
     def check_broken_struct(self, geometry, element_list, threshold_scaling=0.40):
-        print()
+        
         diff = geometry[:, np.newaxis, :] - geometry[np.newaxis, :, :]
         distances = np.linalg.norm(diff, axis=2)
         
@@ -560,7 +573,7 @@ class SubstituteLigand():
         np.fill_diagonal(distances, np.inf)
         broken_flag = np.any(distances < thresholds)
         if broken_flag:
-            print("This structure may be broken...")
+            print("This structure is broken.")
         
         return broken_flag
     

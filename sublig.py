@@ -28,9 +28,6 @@ def num_parse(numbers):
             sub_list.append(int(sub))    
     return sub_list
 
-
-
-
 def covalent_radii_lib(element):
     if element is int:
         element = number_element(element)
@@ -82,8 +79,6 @@ def check_atom_connectivity(mol_list, element_list, atom_num, covalent_radii_thr
 
 
 def make_lig_fragment_list(mol_list, element_list, metal, lig_donor, covalent_radii_threshold_scale=1.2):
-    
-    
     tmp_mol_list = mol_list / UnitValueLib().bohr2angstroms
     for i in range(len(metal)):
         metal[i] -= 1
@@ -164,9 +159,6 @@ class SubstituteLigand():
         for i in range(len(input_donor_atom)):
             self.donor_atom.append(num_parse(input_donor_atom[i])) # for hapticity > 1
             self.sub_donor_atom.append(num_parse(sub_donor_atom[i])) # for hapticity > 1
-        
-        
-
 
         self.metal_atom = num_parse(input_metal_atom) # for polynuclear complex
         self.ndonor = len(self.donor_atom)
@@ -174,7 +166,7 @@ class SubstituteLigand():
         assert self.ndonor == self.nsub_donor, "The number of donor atoms and the number of substituting atoms must be the same."
 
         self.covalent_radii_threshold_scale = 1.2
-        self.iteration = 3000
+        self.iteration = 10000
         self.add_iteration = 6
         self.covalent_radii_flag = kwargs["covalent_radius"]
 
